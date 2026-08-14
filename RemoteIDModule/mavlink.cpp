@@ -51,6 +51,8 @@ void MAVLinkSerial::update(void)
 
     if (mavlink_system.sysid != 0) {
         update_send();
+        // 飞控系统 ID 确认后，请求 PX4 需显式请求的 ODID 消息
+        request_odid_messages();
     } else if (g.mavlink_sysid != 0) {
         mavlink_system.sysid = g.mavlink_sysid;
     } else if (now_ms - last_hb_warn_ms >= 2000) {
@@ -300,4 +302,62 @@ void MAVLinkSerial::arm_status_send(void)
         chan,
         status,
         reason);
+}
+
+/*
+  向飞控请求 ODID 消息并提高发送频率。
+
+  PX4 默认发送 LOCATION 和 SYSTEM，但频率很低（约 0.1~0.3 Hz），
+  远低于 ESP32 arm_status_check() 的 3 秒超时阈值，会导致数据周期性
+  超时，LED 绿红交替。因此通过 MAV_CMD_SET_MESSAGE_INTERVAL (511)
+  主动请求提高 LOCATION/SYSTEM 到 2 Hz，并请求 PX4 默认不发的 BASIC_ID。
+
+  由于飞控刚上电时可能未就绪，采用重发机制：每 3 秒发一次，共发 5 次，
+  确保请求送达。
+ */
+void MAVLinkSerial::request_odid_messages(void)
+{
+    static uint8_t request_count = 0;
+    static uint32_t last_request_ms = 0;
+
+    // 最多重发 5 次，覆盖飞控启动的不确定窗口
+    if (request_count >= 5) {
+        return;
+    }
+
+    const uint32_t now_ms = millis();
+    if (last_request_ms != 0 && now_ms - last_request_ms < 3000) {
+        return;
+    }
+    last_request_ms = now_ms;
+    request_count++;
+
+    const uint32_t interval_2hz_us = 500000;   // 2 Hz（间隔 0.5 秒，远低于 3 秒超时）
+    const uint32_t interval_1hz_us = 1000000;  // 1 Hz
+
+    // 提高 LOCATION 发送频率到 2 Hz（避免超时导致 LED 绿红交替）
+    mavlink_msg_command_long_send(chan,
+        1, 1,
+        MAV_CMD_SET_MESSAGE_INTERVAL, 0,
+        MAVLINK_MSG_ID_OPEN_DRONE_ID_LOCATION,
+        interval_2hz_us,
+        0, 0, 0, 0, 0);
+
+    // 提高 SYSTEM 发送频率到 2 Hz
+    mavlink_msg_command_long_send(chan,
+        1, 1,
+        MAV_CMD_SET_MESSAGE_INTERVAL, 0,
+        MAVLINK_MSG_ID_OPEN_DRONE_ID_SYSTEM,
+        interval_2hz_us,
+        0, 0, 0, 0, 0);
+
+    // 请求 BASIC_ID — PX4 不默认发送此消息，但支持按需提供
+    mavlink_msg_command_long_send(chan,
+        1, 1,
+        MAV_CMD_SET_MESSAGE_INTERVAL, 0,
+        MAVLINK_MSG_ID_OPEN_DRONE_ID_BASIC_ID,
+        interval_1hz_us,
+        0, 0, 0, 0, 0);
+
+    Serial.printf("Requested ODID msgs (LOC/SYS@2Hz, BASIC_ID@1Hz) #%u\n", request_count);
 }

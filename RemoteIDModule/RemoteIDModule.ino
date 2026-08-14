@@ -146,13 +146,13 @@ static const char *check_parse(void)
 {
     String ret = "";
 
-    {
+    if (UAS_data.LocationValid) {
         ODID_Location_encoded encoded {};
         if (encodeLocationMessage(&encoded, &UAS_data.Location) != ODID_SUCCESS) {
             ret += "LOC ";
         }
     }
-    {
+    if (UAS_data.SystemValid) {
         ODID_System_encoded encoded {};
         if (encodeSystemMessage(&encoded, &UAS_data.System) != ODID_SUCCESS) {
             ret += "SYS ";
@@ -172,13 +172,13 @@ static const char *check_parse(void)
             }
         }
     }
-    {
+    if (UAS_data.SelfIDValid) {
         ODID_SelfID_encoded encoded {};
         if (encodeSelfIDMessage(&encoded, &UAS_data.SelfID) != ODID_SUCCESS) {
             ret += "SELF_ID ";
         }
     }
-    {
+    if (UAS_data.OperatorIDValid) {
         ODID_OperatorID_encoded encoded {};
         if (encodeOperatorIDMessage(&encoded, &UAS_data.OperatorID) != ODID_SUCCESS) {
             ret += "OP_ID ";
@@ -329,7 +329,13 @@ static void set_data(Transport &t)
         UAS_data.Location.BaroAccuracy = (ODID_Vertical_accuracy_t)location.barometer_accuracy;
         UAS_data.Location.SpeedAccuracy = (ODID_Speed_accuracy_t)location.speed_accuracy;
         UAS_data.Location.TSAccuracy = (ODID_Timestamp_accuracy_t)location.timestamp_accuracy;
-        UAS_data.Location.TimeStamp = location.timestamp;
+        // 修正 PX4 在无 GPS 锁定时发送的无效时间戳（UINT16_MAX=65535），
+        // OpenDroneID 库要求 timestamp ≤ 3600 秒，超出会导致 encodeLocationMessage() 失败
+        if (location.timestamp <= 3600) {
+            UAS_data.Location.TimeStamp = location.timestamp;
+        } else {
+            UAS_data.Location.TimeStamp = 0;
+        }
         UAS_data.LocationValid = 1;
     }
 
@@ -405,22 +411,22 @@ void loop()
         webif.update();
     }
 
+    // 填充 UAS_data — 在 bcast_powerup 检查之前
+    set_data(transport);
+
     if (g.bcast_powerup) {
-        // if we are broadcasting on powerup we always mark location valid
-        // so the location with default data is sent
+        // 上电即广播模式：无有效位置数据时设为默认值
         if (!UAS_data.LocationValid) {
             UAS_data.Location.Status = ODID_STATUS_REMOTE_ID_SYSTEM_FAILURE;
             UAS_data.LocationValid = 1;
         }
     } else {
-        // only broadcast if we have received a location at least once
+        // 正常模式：至少收到一次位置数据后才广播
         if (last_location_ms == 0) {
             delay(1);
             return;
         }
     }
-
-    set_data(transport);
 
     static uint32_t last_update_wifi_nan_ms;
     if (g.wifi_nan_rate > 0 &&

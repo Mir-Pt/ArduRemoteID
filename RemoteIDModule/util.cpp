@@ -1,19 +1,30 @@
+/*
+  通用工具函数实现
+
+  提供 CRC64 校验和 Base64 编解码功能：
+  - crc_crc64：64 位 CRC 校验（来自 ArduPilot），用于固件映像完整性验证
+  - base64_decode：Base64 字符串解码为二进制数据（用于公钥解码）
+  - base64_encode：二进制数据编码为 Base64 字符串（用于公钥存储）
+ */
 #include "util.h"
 #include <string.h>
 
 /*
-  64 bit crc from ArduPilot
-*/
+  crc_crc64() - 64 位 CRC 校验计算
+  使用多项式 0x42F0E1EBA9EA3693（ECMA-182 标准）。
+  逐字节处理输入数据，每字节进行 8 次移位异或运算。
+  初始值和最终值均取反（标准 CRC 处理方式）。
+ */
 uint64_t crc_crc64(const uint32_t *data, uint16_t num_words)
 {
-    const uint64_t poly = 0x42F0E1EBA9EA3693ULL;
-    uint64_t crc = ~(0ULL);
+    const uint64_t poly = 0x42F0E1EBA9EA3693ULL;  // CRC-64 多项式
+    uint64_t crc = ~(0ULL);  // 初始值全 1
     while (num_words--) {
         uint32_t value = *data++;
-        for (uint8_t j = 0; j < 4; j++) {
+        for (uint8_t j = 0; j < 4; j++) {  // 逐字节处理每个 32 位字
             uint8_t byte = ((uint8_t *)&value)[j];
-            crc ^= (uint64_t)byte << 56u;
-            for (uint8_t i = 0; i < 8; i++) {
+            crc ^= (uint64_t)byte << 56u;  // 将字节放到 CRC 最高位
+            for (uint8_t i = 0; i < 8; i++) {  // 8 次移位
                 if (crc & (1ull << 63u)) {
                     crc = (uint64_t)(crc << 1u) ^ poly;
                 } else {
@@ -22,15 +33,20 @@ uint64_t crc_crc64(const uint32_t *data, uint16_t num_words)
             }
         }
     }
-    crc ^= ~(0ULL);
+    crc ^= ~(0ULL);  // 最终取反
 
     return crc;
 }
 
+// Base64 字符表
 static const char b64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 /*
-  simple base64 decoder, not particularly efficient, but small
+  base64_decode() - Base64 解码
+  将 Base64 编码的字符串解码为原始二进制数据。
+  实现简洁但非高效（逐字符查表），适合嵌入式环境的小数据量场景。
+  处理 '=' 填充字符（末尾每个 '=' 减少 1 字节输出）。
+  返回解码后的字节数，失败返回 0。
  */
 int32_t base64_decode(const char *s, uint8_t *out, const uint32_t max_len)
 {
@@ -71,7 +87,10 @@ int32_t base64_decode(const char *s, uint8_t *out, const uint32_t max_len)
 }
 
 /*
-  encode as base64, returning allocated string
+  base64_encode() - Base64 编码
+  将二进制数据编码为 Base64 字符串。
+  返回动态分配的字符串（调用者需使用 delete[] 释放）。
+  自动添加 '=' 填充使输出长度为 4 的倍数。
 */
 char *base64_encode(const uint8_t *d, int len)
 {
