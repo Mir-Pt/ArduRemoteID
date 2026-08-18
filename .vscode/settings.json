@@ -1,0 +1,16 @@
+{
+    "idf.currentSetup": "C:/Espressif/frameworks/esp-idf-v5.1.2/",
+    "files.associations": {
+        "*.ino": "cpp"
+    },
+    "C_Cpp.default.forcedInclude": [
+        "C:/Users/Administrator/AppData/Local/Arduino15/packages/esp32/hardware/esp32/2.0.11/cores/esp32/Arduino.h"
+    ],
+    "C_Cpp.default.compilerPath": "C:/Users/Administrator/AppData/Local/Arduino15/packages/esp32/tools/xtensa-esp32-elf-gcc/esp-2021r2-patch5-8.4.0/bin/xtensa-esp32-elf-g++.exe",
+    "C_Cpp.intelliSenseEngine": "default",
+    "idf.enableCconfigurationProvider": false,
+    "C_Cpp.default.configurationProvider": "",
+    "clangd.enable": false,
+    "cmake.sourceDirectory": "C:/Users/Administrator/Documents/github/ArduRemoteID/libraries/libmav2odid",
+    "commentTranslate.hover.enabled": true
+}
