@@ -4,3 +4,7 @@ git-version.h
 *.elf
 *.log
 romfs_files.h
+
+# arduino-cli 编译产物目录（build/ 与 build-<板型>/）
+build/
+build-*/
